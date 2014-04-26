@@ -9,6 +9,7 @@ var _       = require('lodash'),
     when    = require('when'),
     errors  = require('../errorHandling'),
     config  = require('../config'),
+    im      = require('imagemagick'),
     baseStore   = require('./base'),
 
     localFileStore;
@@ -21,7 +22,8 @@ localFileStore = _.extend(baseStore, {
     'save': function (image) {
         var saved = when.defer(),
             targetDir = this.getTargetDir(config().paths.imagesPath),
-            targetFilename;
+            targetFilename,
+            fullUrl;
 
         this.getUniqueFileName(this, image, targetDir).then(function (filename) {
             targetFilename = filename;
@@ -30,6 +32,24 @@ localFileStore = _.extend(baseStore, {
             return nodefn.call(fs.copy, image.path, targetFilename);
         }).then(function () {
             return nodefn.call(fs.unlink, image.path).otherwise(errors.logError);
+        }).then(function () {
+            var ext = path.extname(targetFilename),
+                newFileName = path.basename(targetFilename, ext) + '__resized';
+
+            if (ext.toLowerCase() !== '.jpg') return true;
+
+            newFileName = targetFilename.replace(path.basename(targetFilename, ext), newFileName);
+
+            var oldtargetFilename = targetFilename;
+            targetFilename = newFileName;
+
+            return nodefn.call(im.resize, {
+                srcPath: oldtargetFilename,
+                dstPath: targetFilename,
+                quality: 0.85,
+                progressive: true,
+                width: 1000
+            });
         }).then(function () {
             // The src for the image must be in URI format, not a file system path, which in Windows uses \
             // For local file system storage can use relative path so add a slash
